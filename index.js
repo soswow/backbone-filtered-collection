@@ -63,10 +63,34 @@ function execFilter() {
   // Filter the collection
   if (this._superset) {
     filtered = this._superset.filter(_.bind(execFilterOnModel, this));
+    resetChangeHandlers.call(this);
   }
 
   this._collection.reset(filtered);
   this.length = this._collection.length;
+}
+
+function resetChangeHandlers(){
+
+  this.stopListening(this._superset, null, onSpecificKeyChange);
+  this.stopListening(this._superset, "change");
+
+  var nonKeysFilterExists = _.any(_.map(this._filters, function(filter){ return filter.keys === null;}));
+  if(nonKeysFilterExists){
+    this.listenTo(this._superset, "change", onAddChange);
+  }else{
+    var that = this;
+    var keys = _.flatten(_.pluck(this._filters, "keys"));
+    keys.forEach(function(key){
+      that.listenTo(that._superset, "change:" + key, function(model){
+        onSpecificKeyChange.call(that, model);
+      });
+    });
+  }
+}
+
+function onSpecificKeyChange(model){
+  onAddChange.call(this, model);
 }
 
 function onAddChange(model) {
@@ -116,12 +140,6 @@ function onModelAttributeChange(model) {
   }
 }
 
-function onAll(eventName, model, value) {
-  if (eventName.slice(0, 7) === "change:") {
-    onModelAttributeChange.call(this, arguments[1]);
-  }
-}
-
 function onModelRemove(model) {
   if (this.contains(model)) {
     this._collection.remove(model);
@@ -142,9 +160,8 @@ function Filtered(superset) {
   this.resetFilters();
 
   this.listenTo(this._superset, 'reset sort', execFilter);
-  this.listenTo(this._superset, 'add change', onAddChange);
+  this.listenTo(this._superset, 'add', onAddChange);
   this.listenTo(this._superset, 'remove', onModelRemove);
-  this.listenTo(this._superset, 'all', onAll);
 }
 
 var methods = {
@@ -218,7 +235,6 @@ var methods = {
 
     this.trigger('filtered:destroy');
   }
-
 };
 
 // Build up the prototype
